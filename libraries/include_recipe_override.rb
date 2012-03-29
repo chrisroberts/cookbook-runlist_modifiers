@@ -1,32 +1,22 @@
 module RunlistModifiers
   module IncludeRecipe
-    def include_recipe(*recipe_names)
-      result_recipes = Array.new
-      recipe_names.flatten.each do |recipe_name|
-        if node.run_state[:seen_recipes].has_key?(recipe_name)
-          Chef::Log.debug("I am not loading #{recipe_name}, because I have already seen it.")
-          next
-        end
-        node.run_state[:seen_recipes][recipe_name] = true
-        begin
-          if(!_fetch_recipes(:restricted_recipes).empty? && _fetch_recipes(:restricted_recipes).include?(recipe_name))
-            raise Chef::Exceptions::RestrictedRecipe.new(recipe_name)
-          end
 
+    # include_recipe override that provide modifier functionality before
+    # letting recipes continue on to proper inclusion
+    def modifier_include_recipe(*recipe_names)
+      modifier_notification unless @_modifier_noticed
+      recipe_names.collect{|recipe_name|
+        begin
           if(self.is_a?(Chef::RunContext))
-            if(!_fetch_recipes(:allowed_recipes).empty? && _fetch_recipes(:allowed_recipes).include?(recipe_name))
+            if(!_fetch_recipes(:allowed_recipes).empty? && !_fetch_recipes(:allowed_recipes).include?(recipe_name.to_s))
               Chef::Log.warn("Recipe encountered not found in allowed recipe set: #{recipe_name}")
               raise Chef::Exceptions::RestrictedRecipe.new(recipe_name)
             end
           end
-
-          Chef::Log.debug("Loading Recipe #{recipe_name} via include_recipe")
-
-          cookbook_name, recipe_short_name = Chef::Recipe.parse_recipe_name(recipe_name)
-          
-          run_context = self.is_a?(Chef::RunContext) ? self : self.run_context
-          cookbook = run_context.cookbook_collection[cookbook_name]
-          result_recipes << cookbook.load_recipe(recipe_short_name, run_context)
+          if(!_fetch_recipes(:restricted_recipes).empty? && _fetch_recipes(:restricted_recipes).include?(recipe_name.to_s))
+            raise Chef::Exceptions::RestrictedRecipe.new(recipe_name)
+          end
+          original_include_recipe(recipe_name)
         rescue Chef::Exceptions::RestrictedRecipe => e
           if(e.recipe_name == recipe_name)
             msg = 'Restricted recipe encountered:'
@@ -35,8 +25,20 @@ module RunlistModifiers
           end
           Chef::Log.warn msg << " #{recipe_name} -> Not Loaded"
         end
+      }.compact
+    end
+
+    # Provide output about modifiers
+    def modifier_notification
+      @_modifier_noticed = true
+      unless(_fetch_recipes(:allowed_recipes).empty?)  
+        Chef::Log.warn "Allowed recipes modifier is enabled " <<
+          "[#{_fetch_recipes(:allowed_recipes).join(', ')}]"
       end
-      result_recipes
+      unless(_fetch_recipes(:restricted_recipes).empty?)
+        Chef::Log.warn "Restricted recipes modifier is enabled "<<
+          "[#{_fetch_recipes(:restricted_recipes).join(', ')}]"
+      end
     end
 
     # key:: :allowed_recipes or :restricted_recipes
@@ -53,14 +55,28 @@ module RunlistModifiers
               [ri.name, "#{ri.name}::default"]
             end
           end
-        }.flatten.compact
+        }.flatten.compact.map(&:to_s)
       end
       @_mod_recipe_cache[key.to_sym]
+    end
+
+    def self.included?(base)
+      base.class_eval do
+        alias_method :original_include_recipe, :include_recipe
+        alias_method :include_recipe, :modifier_include_recipe
+      end
     end
   end
 end
 
+# Let the override be applied to any new instantiations
 Chef::Mixin::LanguageIncludeRecipe.send(:include, RunlistModifiers::IncludeRecipe)
+
+# Force the override into any existing instantiations
 ObjectSpace.each_object(Chef::RunContext) do |instance|
   instance.extend(RunlistModifiers::IncludeRecipe)
+  instance.instance_eval do
+    alias :original_include_recipe :include_recipe
+    alias :include_recipe :modifier_include_recipe
+  end
 end
