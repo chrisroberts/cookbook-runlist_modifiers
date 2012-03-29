@@ -35,3 +35,10 @@ Combinations:
 These attributes can be combined. This means that if a recipe in the allowed
 recipes depends on a recipe specified within the restricted recipes, it will
 not be loaded. The restricted recipes always have precedence.
+
+History:
+--------
+
+Some history on the origins of this cookbook can be found here:
+
+http://lists.opscode.com/sympa/arc/chef-dev/2012-03/msg00022.html
