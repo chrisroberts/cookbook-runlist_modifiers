@@ -9,13 +9,15 @@ module RunlistModifiers
         end
         node.run_state[:seen_recipes][recipe_name] = true
         begin
-          if(node[:restricted_recipes] && [node[:restricted_recipes]].flatten.include?(recipe_name))
+          if(!_fetch_recipes(:restricted_recipes).empty? && _fetch_recipes(:restricted_recipes).include?(recipe_name))
             raise Chef::Exceptions::RestrictedRecipe.new(recipe_name)
           end
 
-          if(self.is_a?(Chef::RunContext) && node[:allowed_recipes] && ![node[:allowed_recipes]].flatten.include?(recipe_name))
-            Chef::Log.warn("Recipe encountered not found in allowed recipe set: #{recipe_name}")
-            raise Chef::Exceptions::RestrictedRecipe.new(recipe_name)
+          if(self.is_a?(Chef::RunContext))
+            if(!_fetch_recipes(:allowed_recipes).empty? && _fetch_recipes(:allowed_recipes).include?(recipe_name))
+              Chef::Log.warn("Recipe encountered not found in allowed recipe set: #{recipe_name}")
+              raise Chef::Exceptions::RestrictedRecipe.new(recipe_name)
+            end
           end
 
           Chef::Log.debug("Loading Recipe #{recipe_name} via include_recipe")
@@ -36,11 +38,29 @@ module RunlistModifiers
       end
       result_recipes
     end
+
+    # key:: :allowed_recipes or :restricted_recipes
+    # Runs items through RunListItem instances to ensure only recipes
+    def _fetch_recipes(key)
+      @_mod_recipe_cache ||= {}
+      unless(@_mod_recipe_cache[key.to_sym])
+        @_mod_recipe_cache[key.to_sym] = [node[key.to_sym]].flatten.compact.map{|item|
+          ri = Chef::RunList::RunListItem.new(item)
+          if(ri.type == :recipe)
+            if(ri.name.include?('::'))
+              ri.name
+            else
+              [ri.name, "#{ri.name}::default"]
+            end
+          end
+        }.flatten.compact
+      end
+      @_mod_recipe_cache[key.to_sym]
+    end
   end
 end
 
 Chef::Mixin::LanguageIncludeRecipe.send(:include, RunlistModifiers::IncludeRecipe)
-
 ObjectSpace.each_object(Chef::RunContext) do |instance|
   instance.extend(RunlistModifiers::IncludeRecipe)
 end
