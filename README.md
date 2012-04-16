@@ -4,6 +4,11 @@ RunlistModifiers
 This cookbook provides helpers to allow or disallow recipes from being loaded
 via the run list based on node attributes.
 
+Repository:
+----------
+
+https://github.com/heavywater/chef-runlist_modifiers
+
 Attributes:
 -----------
 
