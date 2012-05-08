@@ -24,6 +24,7 @@ module RunlistModifiers
             msg = "Restricted recipe dependency found. (#{recipe_name} depends on #{e.recipe_name})."
           end
           Chef::Log.warn msg << " #{recipe_name} -> Not Loaded"
+          raise e unless self.is_a?(Chef::RunContext)
         end
       }.compact
     end
@@ -60,7 +61,7 @@ module RunlistModifiers
       @_mod_recipe_cache[key.to_sym]
     end
 
-    def self.included?(base)
+    def self.included(base)
       base.class_eval do
         alias_method :original_include_recipe, :include_recipe
         alias_method :include_recipe, :modifier_include_recipe
@@ -71,12 +72,15 @@ end
 
 # Let the override be applied to any new instantiations
 Chef::Mixin::LanguageIncludeRecipe.send(:include, RunlistModifiers::IncludeRecipe)
+Chef::Recipe.send(:include, RunlistModifiers::IncludeRecipe)
 
 # Force the override into any existing instantiations
 ObjectSpace.each_object(Chef::RunContext) do |instance|
   instance.extend(RunlistModifiers::IncludeRecipe)
-  instance.instance_eval do
-    alias :original_include_recipe :include_recipe
-    alias :include_recipe :modifier_include_recipe
+  unless(instance.respond_to?(:original_include_recipe))
+    instance.instance_eval do
+      alias :original_include_recipe :include_recipe
+      alias :include_recipe :modifier_include_recipe
+    end
   end
 end
