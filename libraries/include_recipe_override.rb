@@ -7,14 +7,16 @@ module RunlistModifiers
       modifier_notification unless @_modifier_noticed
       recipe_names.collect{|recipe_name|
         begin
-          if(self.is_a?(Chef::RunContext))
-            if(!_fetch_recipes(:allowed_recipes).empty? && !_fetch_recipes(:allowed_recipes).include?(recipe_name.to_s))
-              Chef::Log.warn("Recipe encountered not found in allowed recipe set: #{recipe_name}")
+          unless(recipe_name.start_with?('runlist_modifiers'))
+            if(self.is_a?(Chef::RunContext))
+              if(!_fetch_recipes(:allowed_recipes).empty? && !_fetch_recipes(:allowed_recipes).include?(recipe_name.to_s))
+                Chef::Log.warn("Recipe encountered not found in allowed recipe set: #{recipe_name}")
+                raise Chef::Exceptions::RestrictedRecipe.new(recipe_name)
+              end
+            end
+            if(!_fetch_recipes(:restricted_recipes).empty? && _fetch_recipes(:restricted_recipes).include?(recipe_name.to_s))
               raise Chef::Exceptions::RestrictedRecipe.new(recipe_name)
             end
-          end
-          if(!_fetch_recipes(:restricted_recipes).empty? && _fetch_recipes(:restricted_recipes).include?(recipe_name.to_s))
-            raise Chef::Exceptions::RestrictedRecipe.new(recipe_name)
           end
           original_include_recipe(recipe_name)
         rescue Chef::Exceptions::RestrictedRecipe => e
@@ -60,11 +62,13 @@ module RunlistModifiers
       end
       @_mod_recipe_cache[key.to_sym]
     end
-
+    
     def self.included(base)
-      base.class_eval do
-        alias_method :original_include_recipe, :include_recipe
-        alias_method :include_recipe, :modifier_include_recipe
+      if(base == Chef::Recipe)
+        base.class_eval do
+          alias_method :original_include_recipe, :include_recipe
+          alias_method :include_recipe, :modifier_include_recipe
+        end
       end
     end
   end
@@ -77,10 +81,8 @@ Chef::Recipe.send(:include, RunlistModifiers::IncludeRecipe)
 # Force the override into any existing instantiations
 ObjectSpace.each_object(Chef::RunContext) do |instance|
   instance.extend(RunlistModifiers::IncludeRecipe)
-  unless(instance.respond_to?(:original_include_recipe))
-    instance.instance_eval do
-      alias :original_include_recipe :include_recipe
-      alias :include_recipe :modifier_include_recipe
-    end
+  instance.instance_eval do
+    alias :original_include_recipe :include_recipe
+    alias :include_recipe :modifier_include_recipe
   end
 end
