@@ -1,3 +1,7 @@
+0.1.2
+-----
+* Adjust aliasing based on inclusion destination
+
 0.1.1
 -----
 * Allow dependency exceptions to properly bubble
