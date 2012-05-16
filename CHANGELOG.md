@@ -1,3 +1,7 @@
+0.1.3
+-----
+* Add automated JSON creation
+
 0.1.2
 -----
 * Adjust aliasing based on inclusion destination

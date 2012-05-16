@@ -41,6 +41,16 @@ These attributes can be combined. This means that if a recipe in the allowed
 recipes depends on a recipe specified within the restricted recipes, it will
 not be loaded. The restricted recipes always have precedence.
 
+Automated JSON creation:
+------------------------
+
+It can be useful to have a JSON file automatically created on nodes that
+contain the default allowances/restrictions. The automated json creator
+will drop the file in: /opt/runlist_modifers.json allowing easy runs
+via knife ssh:
+
+`knife ssh 'role:app' chef-client -j /opt/runlist_modifiers.json`
+
 History:
 --------
 
